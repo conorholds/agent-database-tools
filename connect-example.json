@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Project 1",
+    "postgres_uri": "postgres_connection_string"
+  },
+  {
+    "name": "Project 2",
+    "postgres_uri": "postgres_connection_string"
+  },
+  {
+    "name": "Project 3",
+    "postgres_uri": "postgres_connection_string"
+  }
+]

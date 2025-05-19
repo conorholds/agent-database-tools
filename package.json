@@ -1,0 +1,25 @@
+{
+  "name": "db-tools",
+  "version": "1.0.0",
+  "description": "CLI tool to manage PostgreSQL databases",
+  "main": "index.js",
+  "bin": {
+    "db-tools": "./bin/db-tools.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node ./bin/db-tools.js",
+    "install-local": "npm install -g ."
+  },
+  "keywords": ["database", "postgresql", "cli", "management"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^13.1.0",
+    "dotenv": "^16.5.0",
+    "inquirer": "^8.2.5",
+    "pg": "^8.16.0"
+  }
+}
