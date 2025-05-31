@@ -1,25 +1,46 @@
 {
   "name": "db-tools",
-  "version": "1.0.0",
-  "description": "CLI tool to manage PostgreSQL databases",
+  "version": "2.0.0",
+  "description": "CLI tool to manage PostgreSQL and MongoDB databases with AI agent integration",
   "main": "index.js",
   "bin": {
     "db-tools": "./bin/db-tools.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "./scripts/testing/test-suite.sh --all",
+    "test:quick": "./scripts/testing/test-suite.sh --database postgres --level quick",
+    "test:postgres": "./scripts/testing/test-suite.sh --database postgres --level comprehensive",
+    "test:mongodb": "./scripts/testing/test-suite.sh --database mongodb --level comprehensive",
+    "test:basic": "./scripts/testing/test-suite.sh --database postgres --level basic",
+    "test:verbose": "./scripts/testing/test-suite.sh --all --verbose",
+    "verify": "./scripts/verification/verify-all-databases.sh",
+    "verify:db": "node ./scripts/verification/verify-database.js",
     "start": "node ./bin/db-tools.js",
-    "install-local": "npm install -g ."
+    "install-local": "npm install -g .",
+    "uninstall-local": "npm uninstall -g db-tools",
+    "lint": "echo 'No linter configured yet'",
+    "setup:backup": "./scripts/production/setup-automatic-backups.sh"
   },
-  "keywords": ["database", "postgresql", "cli", "management"],
+  "keywords": [
+    "database",
+    "postgresql",
+    "mongodb",
+    "cli",
+    "management",
+    "backup",
+    "migration",
+    "ai-tools"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "chalk": "^4.1.2",
     "commander": "^13.1.0",
     "dotenv": "^16.5.0",
     "inquirer": "^8.2.5",
+    "mongodb": "^6.16.0",
     "pg": "^8.16.0"
   }
 }

@@ -1,15 +1,6 @@
-// src/utils/db.js
-// This file contains core database utility functions for PostgreSQL operations
-// Includes connection management, query execution, schema inspection, and backup/restore functionality
-
-// Forward to the new modular implementation
-const dbUtils = require('./db/index');
-
-// Re-export all the exports from db/index.js
-module.exports = dbUtils;
-
-// The code below is retained for backward compatibility with any direct consumers
-// but most functionality is now delegated to the modular implementation
+// src/utils/db/postgres.js
+// This file contains PostgreSQL-specific database utility functions
+// Extracted from the original db.js to support multiple database types
 
 const { Pool } = require('pg');
 const fs = require('fs');
@@ -17,59 +8,14 @@ const path = require('path');
 const { execSync, spawnSync } = require('child_process');
 const crypto = require('crypto');
 
-// We require PostgreSQL client tools (pg_dump, pg_restore) to be installed
-
-/**
- * Loads database connection configuration from a JSON file
- * @param {string|null} connectionFile - Path to the connection file; defaults to 'connect.json' in current directory if null
- * @returns {Array<Object>} Array of connection configuration objects
- * @throws Will exit process if connections cannot be loaded
- */
-function loadConnections(connectionFile = null) {
-  try {
-    const connectPath = connectionFile || path.join(process.cwd(), 'connect.json');
-    const rawdata = fs.readFileSync(connectPath);
-    return JSON.parse(rawdata);
-  } catch (error) {
-    console.error('Error loading connections:', error.message);
-    process.exit(1);
-  }
-}
-
-/**
- * Gets connection information for a specific project
- * @param {string} projectName - Name of the project to find connection information for
- * @param {Object} options - Additional options
- * @param {string} [options.connect] - Custom path to connection file
- * @returns {Object} Connection configuration object for the specified project
- * @throws Will exit process if project is not found
- */
-function getConnectionForProject(projectName, options = {}) {
-  const connections = loadConnections(options.connect);
-  const connection = connections.find(conn => conn.name === projectName);
-  
-  if (!connection) {
-    console.error(`No connection found for project: ${projectName}`);
-    console.log('Available projects:');
-    connections.forEach(conn => {
-      console.log(`- ${conn.name}`);
-    });
-    process.exit(1);
-  }
-  
-  return connection;
-}
-
 /**
  * Creates a PostgreSQL connection pool for a specific project
- * @param {string} projectName - Name of the project to create pool for
+ * @param {Object} connection - Database connection configuration object
  * @param {Object} options - Additional connection options
  * @param {string} [options.database] - Optional database name to override the default in connection URI
  * @returns {Pool} PostgreSQL connection pool
  */
-function createPool(projectName, options = {}) {
-  const connection = getConnectionForProject(projectName, options);
-  
+function createPool(connection, options = {}) {
   // Get the connection URI
   let connectionUri = connection.postgres_uri;
   
@@ -89,7 +35,9 @@ function createPool(projectName, options = {}) {
   }
   
   return new Pool({
-    connectionString: connectionUri
+    connectionString: connectionUri,
+    // IMPORTANT: This allows the Node.js process to exit when idle
+    allowExitOnIdle: true
   });
 }
 
@@ -141,15 +89,6 @@ async function executeTransaction(pool, queries) {
   } finally {
     client.release();
   }
-}
-
-/**
- * Lists all available projects from connection configuration
- * @returns {Promise<Array<string>>} Array of project names
- */
-async function listProjects() {
-  const connections = loadConnections();
-  return connections.map(conn => conn.name);
 }
 
 /**
@@ -335,13 +274,27 @@ async function createDatabaseBackup(connection, outputFile, options = {}) {
     }
     
     // Parse connection string to extract credentials
-    const matches = connection.postgres_uri.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
+    // Handle both authenticated and unauthenticated connections
+    let username, password, host, port, database;
     
-    if (!matches) {
-      throw new Error('Invalid PostgreSQL connection string format');
+    // Try with credentials first
+    let matches = connection.postgres_uri.match(/postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/([^?]+)/);
+    
+    if (matches) {
+      // Format: postgresql://user:pass@host:port/db
+      [, username, password, host, port = '5432', database] = matches;
+    } else {
+      // Try without credentials
+      matches = connection.postgres_uri.match(/postgresql:\/\/([^:\/]+)(?::(\d+))?\/([^?]+)/);
+      if (matches) {
+        // Format: postgresql://host:port/db or postgresql://host/db
+        [, host, port = '5432', database] = matches;
+        username = process.env.USER || 'postgres'; // Default username
+        password = ''; // No password
+      } else {
+        throw new Error('Invalid PostgreSQL connection string format');
+      }
     }
-    
-    const [, username, password, host, port, database] = matches;
     
     // Create backup directory if it doesn't exist
     const backupDir = path.dirname(outputFile);
@@ -417,9 +370,10 @@ async function createDatabaseBackup(connection, outputFile, options = {}) {
  * @param {Object} connection - Database connection configuration object
  * @param {string} inputFile - Path to the backup file
  * @param {boolean} [dryRun=false] - If true, only verify the backup without restoring
+ * @param {Object} [options={}] - Additional options (e.g., database override)
  * @returns {Promise<boolean>} True if restore was successful, false otherwise
  */
-async function restoreDatabase(connection, inputFile, dryRun = false) {
+async function restoreDatabase(connection, inputFile, dryRun = false, options = {}) {
   try {
     // Check if pg_restore is available
     if (!isPgClientToolAvailable('pg_restore')) {
@@ -451,13 +405,30 @@ async function restoreDatabase(connection, inputFile, dryRun = false) {
     }
     
     // Parse connection string to extract credentials
-    const matches = connection.postgres_uri.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
+    // Handle both authenticated and unauthenticated connections
+    let username, password, host, port, defaultDatabase;
     
-    if (!matches) {
-      throw new Error('Invalid PostgreSQL connection string format');
+    // Try with credentials first
+    let matches = connection.postgres_uri.match(/postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/([^?]+)/);
+    
+    if (matches) {
+      // Format: postgresql://user:pass@host:port/db
+      [, username, password, host, port = '5432', defaultDatabase] = matches;
+    } else {
+      // Try without credentials
+      matches = connection.postgres_uri.match(/postgresql:\/\/([^:\/]+)(?::(\d+))?\/([^?]+)/);
+      if (matches) {
+        // Format: postgresql://host:port/db or postgresql://host/db
+        [, host, port = '5432', defaultDatabase] = matches;
+        username = process.env.USER || 'postgres'; // Default username
+        password = ''; // No password
+      } else {
+        throw new Error('Invalid PostgreSQL connection string format');
+      }
     }
     
-    const [, username, password, host, port, database] = matches;
+    // Use the database from options if provided, otherwise use the one from connection string
+    const database = options.database || defaultDatabase;
     
     // Set PGPASSWORD environment variable for pg_restore
     process.env.PGPASSWORD = password;
@@ -513,22 +484,9 @@ async function restoreDatabase(connection, inputFile, dryRun = false) {
  * @returns {Promise<boolean>} True if file is encrypted, false otherwise
  */
 async function isFileEncrypted(filePath) {
-  // Read first 16 bytes (potential IV) to check
-  try {
-    const header = Buffer.alloc(16);
-    const fd = fs.openSync(filePath, 'r');
-    fs.readSync(fd, header, 0, 16, 0);
-    fs.closeSync(fd);
-    
-    // Check if it's a standard PostgreSQL backup format
-    const isPgBackup = header.toString('hex').startsWith('504753514c');
-    
-    // If it's not a standard PostgreSQL backup format, it's likely encrypted
-    return !isPgBackup;
-  } catch (error) {
-    console.error('Error checking if file is encrypted:', error.message);
-    return false;
-  }
+  // Check if a .key file exists for this backup
+  const keyFile = filePath + '.key';
+  return fs.existsSync(keyFile);
 }
 
 /**
@@ -686,15 +644,11 @@ async function getAppliedMigrations(pool) {
   return result.rows;
 }
 
-// Exports are handled by the re-export of dbUtils at the top of the file
-// This commented-out section shows the original exports for reference
-/*
+// Export PostgreSQL-specific functionality
 module.exports = {
   createPool,
   executeQuery,
   executeTransaction,
-  listProjects,
-  getConnectionForProject,
   listTables,
   getTableColumns,
   tableExists,
@@ -710,4 +664,3 @@ module.exports = {
   getAppliedMigrations,
   isPgClientToolAvailable
 };
-*/

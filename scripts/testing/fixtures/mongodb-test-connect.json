@@ -1,0 +1,7 @@
+[
+  {
+    "name": "test-mongodb",
+    "type": "mongodb",
+    "mongodb_uri": "mongodb://localhost:27017/db_tools_test"
+  }
+]

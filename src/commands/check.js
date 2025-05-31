@@ -1,7 +1,7 @@
 // src/commands/check.js
 // This file is used to check database structure against expected schema
 
-const { createPool, executeQuery, getTableColumns, getTableConstraints, getTableIndexes, getInstalledExtensions } = require('../utils/db');
+const db = require('../utils/db');
 const { promptForProject } = require('../utils/prompt');
 const { generateFullSchema } = require('../utils/schema');
 const chalk = require('chalk');
@@ -22,47 +22,57 @@ async function checkCommand(projectName, cmdOptions = {}, cmd) {
     projectName = await promptForProject();
   }
   
-  // Create DB connection pool
-  const pool = createPool(projectName, options);
+  // Create a database connection
+  const dbConnection = await db.createConnection(projectName, options);
+  const pool = dbConnection.connection;
   
   try {
     console.log(chalk.cyan(`Checking database for project: ${projectName}`));
     
     // Check required extensions
-    await checkExtensions(pool, projectName);
+    await checkExtensions(dbConnection, pool, projectName);
     
     // Check tables structure
-    await checkTables(pool, projectName);
+    await checkTables(dbConnection, pool, projectName);
     
     // Check foreign key constraints
-    await checkForeignKeys(pool);
+    await checkForeignKeys(dbConnection, pool);
     
     // Check indexes
-    await checkIndexes(pool);
+    await checkIndexes(dbConnection, pool);
     
     // Check seed data
-    await checkSeedData(pool, projectName);
+    await checkSeedData(dbConnection, pool, projectName);
     
     console.log(chalk.green('\n✓ Database check completed'));
+    return true;
     
+  } catch (error) {
+    console.error(chalk.red(`Error checking database: ${error.message}`));
+    return false;
   } finally {
-    // Close connection pool
-    await pool.end();
+    // Close database connection
+    await db.closeConnection(dbConnection);
   }
 }
 
 /**
  * Check if all required extensions are installed
+ * @param {Object} dbConnection - Database connection object
  * @param {Pool} pool - PostgreSQL connection pool
  * @param {string} projectName - Name of the project
  */
-async function checkExtensions(pool, projectName) {
+async function checkExtensions(dbConnection, pool, projectName) {
   console.log(chalk.cyan('\nChecking required PostgreSQL extensions...'));
   
   const schema = generateFullSchema(projectName);
   const requiredExtensions = schema.extensions || [];
   
-  const installedExtensions = await getInstalledExtensions(pool);
+  // For PostgreSQL connections, use the postgres-specific utility
+  let installedExtensions = [];
+  if (dbConnection.type === 'postgres') {
+    installedExtensions = await db.postgres.getInstalledExtensions(pool);
+  }
   const installedExtensionNames = installedExtensions.map(ext => ext.name);
   
   let allPresent = true;
@@ -86,17 +96,18 @@ async function checkExtensions(pool, projectName) {
 
 /**
  * Check if all required tables exist with correct structure
+ * @param {Object} dbConnection - Database connection object
  * @param {Pool} pool - PostgreSQL connection pool
  * @param {string} projectName - Name of the project
  */
-async function checkTables(pool, projectName) {
+async function checkTables(dbConnection, pool, projectName) {
   console.log(chalk.cyan('\nChecking tables structure...'));
   
   const schema = generateFullSchema(projectName);
   
   // Get all tables from database
-  const tablesResult = await executeQuery(
-    pool,
+  const tablesResult = await db.executeQuery(
+    dbConnection,
     `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
   );
   
@@ -112,7 +123,7 @@ async function checkTables(pool, projectName) {
       console.log(chalk.green(`✓ Table ${tableName} exists`));
       
       // Check table columns
-      await checkTableColumns(pool, tableName, schema);
+      await checkTableColumns(dbConnection, pool, tableName, schema);
     } else {
       console.log(chalk.red(`✗ Table ${tableName} does not exist`));
       allTablesPresent = false;
@@ -129,11 +140,12 @@ async function checkTables(pool, projectName) {
 
 /**
  * Check if table columns match the expected schema
+ * @param {Object} dbConnection - Database connection object
  * @param {Pool} pool - PostgreSQL connection pool
  * @param {string} tableName - Name of the table to check
  * @param {Object} schema - Schema definition object
  */
-async function checkTableColumns(pool, tableName, schema) {
+async function checkTableColumns(dbConnection, pool, tableName, schema) {
   const tableSchemaEntry = schema.tables.find(t => t.name === tableName);
   
   if (!tableSchemaEntry) {
@@ -142,7 +154,8 @@ async function checkTableColumns(pool, tableName, schema) {
   }
   
   const expectedColumns = tableSchemaEntry.columns;
-  const actualColumns = await getTableColumns(pool, tableName);
+  // Use the postgres utility directly since we're dealing with postgres-specific functions
+  const actualColumns = await db.postgres.getTableColumns(pool, tableName);
   
   const expectedColumnNames = Object.keys(expectedColumns);
   const actualColumnNames = actualColumns.map(col => col.column_name);
@@ -181,14 +194,15 @@ async function checkTableColumns(pool, tableName, schema) {
 
 /**
  * Check foreign key constraints
+ * @param {Object} dbConnection - Database connection object
  * @param {Pool} pool - PostgreSQL connection pool
  */
-async function checkForeignKeys(pool) {
+async function checkForeignKeys(dbConnection, pool) {
   console.log(chalk.cyan('\nChecking foreign key constraints...'));
   
   // Get all foreign key constraints from the database
-  const allConstraints = await executeQuery(
-    pool,
+  const allConstraints = await db.executeQuery(
+    dbConnection,
     `SELECT
       tc.table_name, 
       kcu.column_name, 
@@ -222,14 +236,15 @@ async function checkForeignKeys(pool) {
 
 /**
  * Check indexes
+ * @param {Object} dbConnection - Database connection object
  * @param {Pool} pool - PostgreSQL connection pool
  */
-async function checkIndexes(pool) {
+async function checkIndexes(dbConnection, pool) {
   console.log(chalk.cyan('\nChecking indexes...'));
   
   // Get all indexes from the database
-  const allIndexes = await executeQuery(
-    pool,
+  const allIndexes = await db.executeQuery(
+    dbConnection,
     `SELECT
       tablename,
       indexname,
@@ -276,10 +291,11 @@ async function checkIndexes(pool) {
 
 /**
  * Check seed data in key tables
+ * @param {Object} dbConnection - Database connection object
  * @param {Pool} pool - PostgreSQL connection pool
  * @param {string} projectName - Name of the project
  */
-async function checkSeedData(pool, projectName) {
+async function checkSeedData(dbConnection, pool, projectName) {
   console.log(chalk.cyan('\nChecking key tables for seed data...'));
   
   // Get the schema to know which tables to check
@@ -305,7 +321,7 @@ async function checkSeedData(pool, projectName) {
         ? `SELECT COUNT(*) FROM "${table.name}" WHERE ${table.condition}`
         : `SELECT COUNT(*) FROM "${table.name}"`;
       
-      const result = await executeQuery(pool, countQuery);
+      const result = await db.executeQuery(dbConnection, countQuery);
       const count = parseInt(result.rows[0].count);
       
       if (count > 0) {

@@ -13,6 +13,8 @@ connect.json
 plans/
 communications/
 backups/
+temp/
+schemas/
 
 # Editor directories and files
 .idea/

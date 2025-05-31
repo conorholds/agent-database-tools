@@ -1,14 +1,22 @@
 [
   {
     "name": "Project 1",
-    "postgres_uri": "postgres_connection_string"
+    "type": "postgres",
+    "postgres_uri": "postgresql://user:password@host:port/database"
   },
   {
     "name": "Project 2",
-    "postgres_uri": "postgres_connection_string"
+    "type": "postgres",
+    "postgres_uri": "postgresql://user:password@host:port/database?sslmode=disable"
   },
   {
     "name": "Project 3",
-    "postgres_uri": "postgres_connection_string"
+    "type": "postgres",
+    "postgres_uri": "postgresql://user:password@host:port/database?sslmode=require"
+  },
+  {
+    "name": "Project 4",
+    "type": "mongodb",
+    "mongodb_uri": "mongodb://user:password@host:port/database?authSource=admin"
   }
 ]

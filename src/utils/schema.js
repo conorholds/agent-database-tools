@@ -23,7 +23,7 @@ const createTimestampFields = () => ({
 const loadSchemaFromFile = (projectName) => {
   try {
     // Convert project name to kebab-case filename
-    const fileName = projectName ? projectName.toLowerCase().replace(/\s+/g, '-') : 'default';
+    const fileName = projectName ? projectName.toLowerCase().replace(/[\s_]+/g, '-') : 'default';
     const schemaPath = path.join(process.cwd(), 'schemas', `${fileName}.js`);
     
     if (fs.existsSync(schemaPath)) {
@@ -585,7 +585,7 @@ const generateFullSchema = (projectName) => {
         {
           email: 'admin@yardrevision.com',
           // Note: Password should be properly hashed in production
-          password: '$2b$10$Wh/InkuU9jAZ5hrfCXXgcOAFFMDDEjV89z4ZIQRy9XmHF7g1IRxnK', // "admin123"
+          password: '$2b$10$KmGTeDDd7z1BSPDIYga.9OQORSKKVFblHLZL4sxsRUnRSxIH1kptW', // bcrypt(sha256("ydrv2025"))
           name: 'Admin User',
           credits: 1000,
           referral_code: 'YARDADMIN',
@@ -620,7 +620,73 @@ const generateCreateTableSQL = (table) => {
   indexes.forEach(index => {
     const indexName = `idx_${name}_${index.columns.join('_')}`;
     const indexType = index.type || 'btree';
-    sql += `CREATE INDEX IF NOT EXISTS "${indexName}" ON "${name}" USING ${indexType} (${index.columns.map(c => `"${c}"`).join(', ')});\n`;
+    const uniqueClause = index.unique ? 'UNIQUE ' : '';
+    const whereClause = index.where ? ` WHERE ${index.where}` : '';
+    sql += `CREATE ${uniqueClause}INDEX IF NOT EXISTS "${indexName}" ON "${name}" USING ${indexType} (${index.columns.map(c => `"${c}"`).join(', ')})${whereClause};\n`;
+  });
+  
+  return sql;
+};
+
+/**
+ * Generates SQL for creating a table without foreign key constraints
+ * @param {Object} table - Table definition object
+ * @returns {string} SQL statement for creating the table without foreign keys
+ */
+const generateCreateTableSQLWithoutForeignKeys = (table) => {
+  const { name, columns } = table;
+  
+  // Build column definitions without foreign key constraints
+  const columnDefs = Object.entries(columns).map(([colName, colDef]) => {
+    // Remove REFERENCES clauses from column definitions
+    const cleanColDef = colDef.replace(/REFERENCES\s+\w+\s*\([^)]*\)(\s+ON\s+DELETE\s+[A-Z\s]+)?(\s+ON\s+UPDATE\s+[A-Z\s]+)?/gi, '');
+    return `  "${colName}" ${cleanColDef}`;
+  });
+  
+  // Create table SQL
+  return `CREATE TABLE IF NOT EXISTS "${name}" (\n${columnDefs.join(',\n')}\n);\n\n`;
+};
+
+/**
+ * Generates SQL for adding foreign key constraints to a table
+ * @param {Object} table - Table definition object
+ * @returns {string} SQL statements for adding foreign key constraints
+ */
+const generateForeignKeyConstraints = (table) => {
+  const { name, columns } = table;
+  let sql = '';
+  
+  Object.entries(columns).forEach(([colName, colDef]) => {
+    const referencesMatch = colDef.match(/REFERENCES\s+(\w+)\s*\(([^)]*)\)(\s+ON\s+DELETE\s+[A-Z\s]+)?(\s+ON\s+UPDATE\s+[A-Z\s]+)?/i);
+    if (referencesMatch) {
+      const referencedTable = referencesMatch[1];
+      const referencedColumn = referencesMatch[2];
+      const onDelete = referencesMatch[3] || '';
+      const onUpdate = referencesMatch[4] || '';
+      
+      const constraintName = `fk_${name}_${colName}`;
+      sql += `ALTER TABLE "${name}" ADD CONSTRAINT "${constraintName}" FOREIGN KEY ("${colName}") REFERENCES "${referencedTable}" (${referencedColumn})${onDelete}${onUpdate};\n`;
+    }
+  });
+  
+  return sql;
+};
+
+/**
+ * Generates SQL for creating indexes for a table
+ * @param {Object} table - Table definition object
+ * @returns {string} SQL statements for creating indexes
+ */
+const generateIndexes = (table) => {
+  const { name, indexes = [] } = table;
+  let sql = '';
+  
+  indexes.forEach(index => {
+    const indexName = `idx_${name}_${index.columns.join('_')}`;
+    const indexType = index.type || 'btree';
+    const uniqueClause = index.unique ? 'UNIQUE ' : '';
+    const whereClause = index.where ? ` WHERE ${index.where}` : '';
+    sql += `CREATE ${uniqueClause}INDEX IF NOT EXISTS "${indexName}" ON "${name}" USING ${indexType} (${index.columns.map(c => `"${c}"`).join(', ')})${whereClause};\n`;
   });
   
   return sql;
@@ -675,6 +741,75 @@ const generateUpdateTriggers = (tables) => {
 };
 
 /**
+ * Analyzes table dependencies based on foreign key references
+ * @param {Array<Object>} tables - Array of table definition objects
+ * @returns {Array<Object>} Tables sorted by dependency order (dependencies first)
+ */
+const sortTablesByDependency = (tables) => {
+  const tableDependencies = new Map();
+  
+  // Build dependency map
+  tables.forEach(table => {
+    const dependencies = [];
+    Object.entries(table.columns).forEach(([colName, colDef]) => {
+      // Look for REFERENCES keyword to identify foreign keys
+      const referencesMatch = colDef.match(/REFERENCES\s+(\w+)\s*\(/i);
+      if (referencesMatch) {
+        const referencedTable = referencesMatch[1];
+        if (referencedTable !== table.name) { // Avoid self-references
+          dependencies.push(referencedTable);
+        }
+      }
+    });
+    tableDependencies.set(table.name, dependencies);
+  });
+  
+  // Topological sort
+  const sorted = [];
+  const visited = new Set();
+  const visiting = new Set();
+  
+  const visit = (tableName) => {
+    if (visiting.has(tableName)) {
+      // Circular dependency detected - skip for now
+      return;
+    }
+    if (visited.has(tableName)) {
+      return;
+    }
+    
+    visiting.add(tableName);
+    const dependencies = tableDependencies.get(tableName) || [];
+    
+    dependencies.forEach(dep => {
+      if (tableDependencies.has(dep)) {
+        visit(dep);
+      }
+    });
+    
+    visiting.delete(tableName);
+    visited.add(tableName);
+    
+    const table = tables.find(t => t.name === tableName);
+    if (table) {
+      sorted.push(table);
+    }
+  };
+  
+  // Visit all tables
+  tables.forEach(table => visit(table.name));
+  
+  // Add any tables that weren't visited (no dependencies)
+  tables.forEach(table => {
+    if (!sorted.find(t => t.name === table.name)) {
+      sorted.unshift(table); // Add at beginning since they have no dependencies
+    }
+  });
+  
+  return sorted;
+};
+
+/**
  * Generates complete SQL for initializing a database
  * @param {string} projectName - Name of the project
  * @returns {string} Complete SQL initialization script including extensions, tables, functions, triggers, and seed data
@@ -691,28 +826,54 @@ const generateInitializationSQL = (projectName) => {
     sql += '\n';
   }
   
-  // Create all tables
-  if (schema.tables && Array.isArray(schema.tables)) {
-    schema.tables.forEach(table => {
-      sql += generateCreateTableSQL(table);
-    });
-  }
-  
-  // Create functions and triggers if defined
+  // Create functions first (needed for triggers)
   if (schema.functions && Array.isArray(schema.functions)) {
     schema.functions.forEach(func => {
       sql += `${func.body}\n`;
+    });
+    sql += '\n';
+  }
+  
+  // Sort tables by dependency order and create them
+  if (schema.tables && Array.isArray(schema.tables)) {
+    const sortedTables = sortTablesByDependency(schema.tables);
+    
+    // Create tables without foreign key constraints first
+    sortedTables.forEach(table => {
+      sql += generateCreateTableSQLWithoutForeignKeys(table);
+    });
+    
+    // Add foreign key constraints after all tables are created
+    sortedTables.forEach(table => {
+      sql += generateForeignKeyConstraints(table);
+    });
+    
+    // Create indexes
+    sortedTables.forEach(table => {
+      sql += generateIndexes(table);
+    });
+  }
+  
+  // Add triggers after tables are created
+  if (schema.functions && Array.isArray(schema.functions)) {
+    schema.functions.forEach(func => {
       if (func.trigger) {
         sql += `${func.trigger}\n`;
       }
     });
   }
   
-  // Add update_at triggers for all tables if functions are defined
+  // Add update_at triggers for all tables
   if (schema.tables && Array.isArray(schema.tables)) {
-    if (schema.functions && Array.isArray(schema.functions)) {
-      sql += generateUpdateTriggers(schema.tables);
-    }
+    sql += generateUpdateTriggers(schema.tables);
+  }
+  
+  // Execute post-creation SQL if defined
+  if (schema.postSql && Array.isArray(schema.postSql)) {
+    sql += '\n-- Post-creation SQL\n';
+    schema.postSql.forEach(statement => {
+      sql += `${statement};\n`;
+    });
   }
   
   // Insert seed data if defined

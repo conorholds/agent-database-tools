@@ -1,9 +1,9 @@
 // src/utils/prompt.js
 // This file contains utility functions for interactive command-line prompts
-// Provides user prompts for projects, tables, columns, and confirmations
+// Provides user prompts for projects, tables/collections, columns/fields, and confirmations
 
 const inquirer = require('inquirer');
-const { listProjects, listTables, getTableColumns } = require('./db');
+const { listProjects, listTables, getTableColumns, getDatabaseType } = require('./db');
 
 /**
  * Prompts the user to select a project from available projects
@@ -26,53 +26,81 @@ async function promptForProject() {
 
 /**
  * Prompts the user to select a table from the database
- * @param {Pool} pool - PostgreSQL connection pool
+ * @param {Pool|Object} connection - PostgreSQL connection pool or MongoDB connection
+ * @param {string} [dbType] - Database type ('postgres' or 'mongodb')
  * @returns {Promise<string|null>} The selected table name or null if no tables found
  */
-async function promptForTable(pool) {
-  const tables = await listTables(pool);
+async function promptForTable(connection, dbType = 'postgres') {
+  const tables = await listTables(connection);
   
   if (tables.length === 0) {
-    console.log('No tables found in the database');
+    console.log(`No ${dbType === 'mongodb' ? 'collections' : 'tables'} found in the database`);
     return null;
   }
   
-  const { tableName } = await inquirer.prompt([
+  const promptMessage = dbType === 'mongodb' ? 'Select a collection:' : 'Select a table:';
+  const promptName = dbType === 'mongodb' ? 'collectionName' : 'tableName';
+  
+  const result = await inquirer.prompt([
     {
       type: 'list',
-      name: 'tableName',
-      message: 'Select a table:',
+      name: promptName,
+      message: promptMessage,
       choices: tables
     }
   ]);
   
-  return tableName;
+  return result[promptName];
+}
+
+/**
+ * Prompts the user to select a collection from MongoDB
+ * @param {Object} connection - MongoDB connection object with db property
+ * @returns {Promise<string|null>} The selected collection name or null if no collections found
+ */
+async function promptForCollection(connection) {
+  return promptForTable(connection, 'mongodb');
 }
 
 /**
  * Prompts the user to select a column from a specific table
- * @param {Pool} pool - PostgreSQL connection pool
- * @param {string} tableName - Name of the table
- * @returns {Promise<string|null>} The selected column name or null if no columns found
+ * @param {Pool|Object} connection - PostgreSQL connection pool or MongoDB connection object
+ * @param {string} tableName - Name of the table or collection
+ * @param {string} [dbType] - Database type ('postgres' or 'mongodb')
+ * @returns {Promise<string|null>} The selected column/field name or null if none found
  */
-async function promptForColumn(pool, tableName) {
-  const columns = await getTableColumns(pool, tableName);
+async function promptForColumn(connection, tableName, dbType = 'postgres') {
+  const columns = await getTableColumns(connection, tableName);
   
   if (columns.length === 0) {
-    console.log(`No columns found in table ${tableName}`);
+    console.log(`No ${dbType === 'mongodb' ? 'fields' : 'columns'} found in ${dbType === 'mongodb' ? 'collection' : 'table'} ${tableName}`);
     return null;
   }
+  
+  const promptMessage = dbType === 'mongodb' ? 'Select a field:' : 'Select a column:';
+  const promptName = 'columnName';
+  const columnProperty = dbType === 'mongodb' ? 'name' : 'column_name';
   
   const { columnName } = await inquirer.prompt([
     {
       type: 'list',
-      name: 'columnName',
-      message: 'Select a column:',
-      choices: columns.map(col => col.column_name)
+      name: promptName,
+      message: promptMessage,
+      choices: columns.map(col => col[columnProperty])
     }
   ]);
   
   return columnName;
+}
+
+/**
+ * Prompts the user to select a field from a MongoDB collection
+ * @param {Object} connection - MongoDB connection object with db property
+ * @param {string} collectionName - Name of the collection
+ * @returns {Promise<string|null>} The selected field name or null if no fields found
+ */
+async function promptForField(connection, collectionName) {
+  return promptForColumn(connection, collectionName, 'mongodb');
 }
 
 /**
@@ -158,6 +186,8 @@ async function confirmAction(message) {
 module.exports = {
   promptForProject,
   promptForTable,
+  promptForCollection,
+  promptForField,
   promptForColumn,
   promptForColumnDefinition,
   confirmAction

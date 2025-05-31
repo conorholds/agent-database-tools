@@ -1,6 +1,6 @@
 # Agent Database Tools
 
-A command-line interface tool to manage PostgreSQL databases through direct commands or natural language interactions with AI agents. Query, migrate, back‑up & explore your databases with either precise commands or plain‑English prompts sent through ChatGPT, Claude, or any other shell‑enabled LLM.
+A command-line interface tool to manage PostgreSQL and MongoDB databases through direct commands or natural language interactions with AI agents. Query, migrate, back‑up & explore your databases with either precise commands or plain‑English prompts sent through ChatGPT, Claude, or any other shell‑enabled LLM.
 
 > ⚠️ **DISCLAIMER: DEVELOPMENTAL SOFTWARE** ⚠️
 >
@@ -36,28 +36,41 @@ A command-line interface tool to manage PostgreSQL databases through direct comm
 
 ## Overview
 
-db-tools CLI provides two powerful ways to interact with your PostgreSQL databases:
+db-tools CLI provides two powerful ways to interact with your databases:
 
 1. **Direct Command Usage** - Traditional CLI commands for database operations
 2. **AI Agent Integration** - Natural language conversations with AI to explore and modify databases
 
 This dual approach lets you switch between precise command execution and conversational database management depending on your needs.
 
+### 🛡️ Enhanced Safety Features
+
+- **Test Database Validation** - All dangerous operations are tested in an isolated copy first
+- **Automatic Temporary Backups** - Encrypted backups created before dangerous operations (4-hour retention)
+- **CASCADE Protection** - Special warnings and validation for operations that affect multiple tables
+- **Multi-level Confirmation** - Requires explicit confirmation for dangerous operations
+- **Dependency Analysis** - Shows all affected tables and foreign key relationships
+
+### Supported Databases
+
+- **PostgreSQL** - Full support for PostgreSQL 12+ with native tool integration
+- **MongoDB** - Full support for MongoDB 4.0+ with collection management, queries, and all CRUD operations
+
 ## AI-Powered Database Management
 
 DB Tools CLI was designed specifically to work with AI assistants like Claude, ChatGPT, and other LLMs. This integration allows you to:
 
-- **Query databases using natural language** instead of SQL
+- **Query databases using natural language** instead of SQL or MongoDB queries
 - **Make database changes through conversation** rather than remembering command syntax
-- **Explore database schema intuitively** by asking the AI about your tables and relationships
+- **Explore database schema intuitively** by asking the AI about your tables/collections and relationships
 - **Troubleshoot database issues** by describing the problem in everyday language
 
 ## Why db-tools?
 
 - **Two modes, one binary** – traditional CLI flags when you need surgical accuracy, natural-language when you just want to _ask_.
-- **Schema-aware AI** – db-tools surfaces table/column metadata so your LLM can write safe SQL automatically.
+- **Schema-aware AI** – db-tools surfaces metadata so your LLM can write safe queries automatically.
 - **End-to-end workflow** – initialise, migrate, seed, back-up, restore and audit – all in one place.
-- **PostgreSQL-first** – leverages `pg_dump`, `pg_restore`, `psql`, and other native tools under the hood.
+- **Multi-database support** – Works with both PostgreSQL and MongoDB, with a consistent interface.
 
 ### Example Conversations
 
@@ -96,30 +109,49 @@ Agent: *inspects database schema and explains the relationships*
 
 ## Features
 
+### Core Database Operations
+
 - Initialize databases with project-specific schemas
-- Modify existing tables (add/remove/rename columns)
-- Create indexes on tables
-- Run SQL migrations
-- Seed tables with initial data
+- Modify existing tables/collections (add columns/fields, remove fields, etc.)
+- Create indexes on tables/collections
+- Run SQL migrations for PostgreSQL
+- Track migration operations for MongoDB
+- Seed tables/collections with initial data
 - Check database structure and integrity
 - Backup databases (with optional encryption)
 - Set up automated scheduled backups with retention policies
 - Restore databases from backups
-- Delete tables
-- Rename tables
-- Flexible search across databases, tables, and columns
-- Execute raw SQL queries with formatted results
+- Delete tables/collections with validation
+- Rename tables/collections (PostgreSQL tables, MongoDB collections)
+- Advanced search across databases, tables/collections, and fields with regex and highlighting
+- Execute raw SQL/MongoDB queries with formatted results
+- MongoDB-specific operations: collection management, document field operations
+
+### Enhanced Developer Experience
+
+- **Comprehensive validation** - Input validation and type checking for all operations
+- **Enhanced error handling** - Detailed error messages with actionable suggestions
+- **Dry-run mode** - Preview destructive operations before execution
+- **Configuration validation** - Validate and test database configurations
+- **Standardized logging** - Structured error logging and debugging support
+- **Extensive documentation** - Comprehensive JSDoc comments and examples
 
 ## Installation
 
 ### Prerequisites
 
-This tool requires PostgreSQL 16 client tools to be installed:
+This tool requires:
 
-- **pg_dump**: For database backup operations
-- **pg_restore**: For database restore operations
-- **psql**: For executing SQL scripts
-- **createdb/dropdb**: For testing and database management
+- **For PostgreSQL**: PostgreSQL 16 client tools
+
+  - pg_dump
+  - pg_restore
+  - psql
+  - createdb/dropdb
+
+- **For MongoDB**: MongoDB Database Tools
+  - mongodump
+  - mongorestore
 
 > **IMPORTANT:** PostgreSQL 16 client tools are required for compatibility with PostgreSQL 16 servers.
 
@@ -137,6 +169,10 @@ brew services start postgresql@16
 # Add PostgreSQL 16 to your PATH
 echo 'export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
+
+# Install MongoDB and MongoDB Database Tools
+brew tap mongodb/brew
+brew install mongodb-community mongodb-database-tools
 ```
 
 **Ubuntu/Debian:**
@@ -152,6 +188,12 @@ sudo apt-get install postgresql-16 postgresql-client-16
 
 # Start the PostgreSQL 16 server
 sudo systemctl start postgresql@16-main
+
+# Install MongoDB and tools
+wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
+sudo apt-get update
+sudo apt-get install -y mongodb-org mongodb-database-tools
 ```
 
 **Windows:**
@@ -159,6 +201,8 @@ sudo systemctl start postgresql@16-main
 1. Download PostgreSQL 16 from https://www.postgresql.org/download/windows/
 2. Run the installer and select the client tools
 3. Add the bin directory to your PATH
+4. Download MongoDB Database Tools from https://www.mongodb.com/try/download/database-tools
+5. Add MongoDB bin directory to your PATH
 
 ### Installation
 
@@ -167,7 +211,7 @@ sudo systemctl start postgresql@16-main
 git clone <repository-url>
 cd db-tools
 
-# Run the installation script (automatically installs PostgreSQL 16 client tools)
+# Run the installation script (automatically installs required tools)
 ./install.sh
 ```
 
@@ -175,13 +219,12 @@ The installation script will:
 
 1. Check if PostgreSQL 16 client tools are installed
 2. Install or upgrade to PostgreSQL 16 if needed (using brew on macOS or apt-get/yum on Linux)
-3. Update your shell profile to include the PostgreSQL 16 path
-4. Install DB Tools dependencies
-5. Make the tool available globally
+3. Check if MongoDB tools are installed and install them if needed
+4. Update your shell profile to include the required paths
+5. Install DB Tools dependencies
+6. Make the tool available globally
 
 After installation, you may need to run `source ~/.zshrc` (or your appropriate shell profile) to update your PATH in the current shell.
-
-> **Note:** The script is configured to install PostgreSQL 16 client tools by default, which is required for connecting to PostgreSQL 16 servers. If you need to connect to a different PostgreSQL version, you can edit the `PG_TARGET_VERSION` variable in the install.sh script.
 
 ## Configuring for AI Agent Use
 
@@ -217,13 +260,25 @@ For best results, run db-tools commands directly in the db-tools repository wher
 
 ```
 db-tools/
-├── bin/                 # CLI entry point
+├── bin/                    # CLI entry point
 ├── src/
-│   ├── commands/        # Command implementations
-│   ├── utils/           # Shared utilities
-│   └── schemas/         # Schema definitions
-├── schemas/             # Project-specific schema files
-├── backups/             # Database backup files
+│   ├── commands/           # Command implementations
+│   │   ├── postgres/       # PostgreSQL-specific commands
+│   │   ├── mongodb/        # MongoDB-specific commands
+│   │   └── *.js           # Database-agnostic commands
+│   ├── utils/              # Shared utilities
+│   │   ├── db/             # Database-specific utilities
+│   │   │   ├── postgres.js # PostgreSQL utilities
+│   │   │   ├── mongodb.js  # MongoDB utilities
+│   │   │   └── index.js    # Database abstraction layer
+│   │   └── *.js           # Other utilities
+│   └── schemas/            # Default schema templates
+├── schemas/                # Project-specific schema files
+├── backups/                # Database backup files
+├── scripts/                # Testing and utility scripts
+│   ├── testing/            # Test framework
+│   └── production/         # Production scripts
+└── migrations/             # Database migration files
 ```
 
 ## Usage
@@ -235,25 +290,54 @@ The tool uses a `connect.json` file in the project root to manage database conne
 ```json
 [
   {
-    "name": "Project Name",
+    "name": "PostgreSQL Project",
+    "type": "postgres",
     "postgres_uri": "postgresql://username:password@hostname:port/database?sslmode=disable"
+  },
+  {
+    "name": "MongoDB Project",
+    "type": "mongodb",
+    "mongodb_uri": "mongodb://username:password@hostname:port/database"
   }
 ]
 ```
 
+The `type` field explicitly identifies the database type ("postgres" or "mongodb"). While this field is optional (the tool can detect the database type from the connection URI), it's recommended to include it for clarity and future compatibility.
+
+#### Working with Multiple Database Types
+
+When you have multiple connections with the same project name but different database types, use the `--type` flag to specify which database to use:
+
+```bash
+# If you have both PostgreSQL and MongoDB connections named "Production"
+# List PostgreSQL tables
+db-tools list-tables "Production" --type postgres
+
+# List MongoDB collections  
+db-tools list-tables "Production" --type mongodb
+
+# Backup PostgreSQL database
+db-tools backup "Production" --type postgres --output ./backups/pg_backup.sql
+
+# Backup MongoDB database
+db-tools backup "Production" --type mongodb --output ./backups/mongo_backup
+```
+
+This `--type` flag is available on all commands and provides a clean way to work with mixed database environments without needing separate connection names.
+
 #### Working with Different Databases
 
-All commands support a `-d, --database <name>` option to specify which database to connect to, allowing you to easily switch between databases (development, staging, production) without modifying the `connect.json` file:
+All commands support a `-d, --database <n>` option to specify which database to connect to, allowing you to easily switch between databases (development, staging, production) without modifying the `connect.json` file:
 
 ```bash
 # List tables in the production database
-db-tools list-tables "Yard ReVision" -d production
+db-tools list-tables "Project Name" -d production
 
 # Count records in the staging database
-db-tools count-records "Yard ReVision" users -d staging
+db-tools count-records "Project Name" users -d staging
 
 # Check the structure of the testing database
-db-tools check "Yard ReVision" -d testing
+db-tools check "Project Name" -d testing
 ```
 
 The tool will keep the same connection parameters (username, password, host, port) but will connect to the specified database name instead of the one in the connection string.
@@ -262,16 +346,16 @@ The tool will keep the same connection parameters (username, password, host, por
 
 ```bash
 # Initialize a new test database with the schema
-db-tools init "Yard ReVision" -d yard_test
+db-tools init "Project Name" -d test_db
 
 # Backup the production database
-db-tools backup "Yard ReVision" -d production --output ./backups/production_backup.backup
+db-tools backup "Project Name" -d production --output ./backups/production_backup.backup
 
 # Restore a backup to the development database
-db-tools restore "Yard ReVision" -d development --input ./backups/production_backup.backup
+db-tools restore "Project Name" -d development --input ./backups/production_backup.backup
 
 # Migrate a specific database
-db-tools migrate "Yard ReVision" -d staging ./migrations/002_add_user_preferences.sql
+db-tools migrate "Project Name" -d staging ./migrations/002_add_user_preferences.sql
 ```
 
 ### Natural Language Examples vs. Direct Commands
@@ -283,14 +367,14 @@ The power of DB Tools CLI is the ability to use either precise commands or conve
 **Traditional Command:**
 
 ```bash
-db-tools list-tables "Yard ReVision"
-db-tools list-columns "Yard ReVision" users
+db-tools list-tables "Project Name"
+db-tools list-columns "Project Name" users
 ```
 
 **Natural Language with AI:**
 
 ```
-"Show me all the tables in the Yard ReVision database"
+"Show me all the tables in the Project Name database"
 "What columns are in the users table?"
 "Can you explain how the users and transactions tables are related?"
 ```
@@ -300,8 +384,8 @@ db-tools list-columns "Yard ReVision" users
 **Traditional Command:**
 
 ```bash
-db-tools add-column "Yard ReVision" users profile_image TEXT
-db-tools create-index "Yard ReVision" transactions user_id
+db-tools add-column "Project Name" users profile_image TEXT
+db-tools create-index "Project Name" transactions user_id
 ```
 
 **Natural Language with AI:**
@@ -317,7 +401,7 @@ db-tools create-index "Yard ReVision" transactions user_id
 **Traditional Command:**
 
 ```bash
-db-tools query "Yard ReVision" "SELECT * FROM users WHERE created_at > '2025-01-01'" -d production
+db-tools query "Project Name" "SELECT * FROM users WHERE created_at > '2025-01-01'" -d production
 ```
 
 **Natural Language with AI:**
@@ -333,8 +417,8 @@ db-tools query "Yard ReVision" "SELECT * FROM users WHERE created_at > '2025-01-
 **Traditional Command:**
 
 ```bash
-db-tools backup "Yard ReVision" -d production --encrypt
-db-tools auto-backup "Yard ReVision" --retention-days 14 --schedule "0 2 * * 0"
+db-tools backup "Project Name" -d production --encrypt
+db-tools auto-backup "Project Name" --retention-days 14 --schedule "0 2 * * 0"
 ```
 
 **Natural Language with AI:**
@@ -354,23 +438,23 @@ db-tools auto-backup "Yard ReVision" --retention-days 14 --schedule "0 2 * * 0"
 db-tools init
 
 # Specify project name
-db-tools init "Yard ReVision"
+db-tools init "Project Name"
 
 # Force re-creation of tables even if they exist
-db-tools init "Yard ReVision" --force
+db-tools init "Project Name" --force
 ```
 
-#### Add Column to Table
+#### Add Column to Table (PostgreSQL)
 
 ```bash
 # Interactive mode
 db-tools add-column
 
 # Specify project, table, column, and data type
-db-tools add-column "Yard ReVision" users new_column TEXT
+db-tools add-column "Project Name" users new_column TEXT
 
 # With constraints
-db-tools add-column "Yard ReVision" users new_column TEXT --default 'value' --not-null
+db-tools add-column "Project Name" users new_column TEXT --default 'value' --not-null
 ```
 
 #### Create Index
@@ -380,40 +464,40 @@ db-tools add-column "Yard ReVision" users new_column TEXT --default 'value' --no
 db-tools create-index
 
 # Specify project, table, and column
-db-tools create-index "Yard ReVision" designs user_id
+db-tools create-index "Project Name" designs user_id
 
 # Create a unique index
-db-tools create-index "Yard ReVision" users email --unique
+db-tools create-index "Project Name" users email --unique
 ```
 
 #### Run Migration
 
 ```bash
 # Interactive mode - lists available migrations
-db-tools migrate "Yard ReVision"
+db-tools migrate "Project Name"
 
 # Specify migration file
-db-tools migrate "Yard ReVision" ./migrations/001_create_admin_user.sql
+db-tools migrate "Project Name" ./migrations/001_create_admin_user.sql
 ```
 
 #### Seed Data
 
 ```bash
 # Interactive mode - lists available tables with seed data
-db-tools seed "Yard ReVision"
+db-tools seed "Project Name"
 
 # Specify table to seed
-db-tools seed "Yard ReVision" templates
+db-tools seed "Project Name" templates
 
 # Use custom seed data file
-db-tools seed "Yard ReVision" templates --file ./data/custom_templates.json
+db-tools seed "Project Name" templates --file ./data/custom_templates.json
 ```
 
 #### Check Database
 
 ```bash
 # Check database structure and report issues
-db-tools check "Yard ReVision"
+db-tools check "Project Name"
 ```
 
 #### Search in Database
@@ -422,28 +506,40 @@ The search command provides powerful capabilities to find data across multiple t
 
 ```bash
 # Search for "smith" across all tables and columns
-db-tools search "Yard ReVision" smith
+db-tools search "Project Name" smith
 
 # Search in a specific table
-db-tools search "Yard ReVision" users smith
+db-tools search "Project Name" users smith
 
 # Search in a specific table and column
-db-tools search "Yard ReVision" users email smith
+db-tools search "Project Name" users email smith
 
 # Search with options
-db-tools search "Yard ReVision" --value "smith" --limit 50 --case-sensitive
+db-tools search "Project Name" --value "smith" --limit 50 --case-sensitive
 
 # Search with exact matching
-db-tools search "Yard ReVision" --value "smith@example.com" --exact
+db-tools search "Project Name" --value "smith@example.com" --exact
 
 # Output results as JSON
-db-tools search "Yard ReVision" smith --json
+db-tools search "Project Name" smith --json
 
 # Search in JSONB data (format: "key:value")
-db-tools search "Yard ReVision" "settings:dark_mode"
+db-tools search "Project Name" "settings:dark_mode"
 
 # Search in a specific database
-db-tools search "Yard ReVision" smith -d production
+db-tools search "Project Name" smith -d production
+
+# Search with regular expressions
+db-tools search "Project Name" --regex "^smith.*@gmail\.com"
+
+# Search with highlighted results
+db-tools search "Project Name" smith --highlight
+
+# Search recursively in nested JSON/JSONB data
+db-tools search "Project Name" "data->users->name" --recursive
+
+# Search in MongoDB using regex and highlighting
+db-tools search "MongoDB Project" --regex "^user.*" --highlight
 ```
 
 The search command intelligently handles different data types:
@@ -454,16 +550,20 @@ The search command intelligently handles different data types:
 - Date/Time: Substring matching in string representation
 - JSON/JSONB: Text search or key-value matching with "key:value" format
 - Special handling for NULL values (search for "null")
+- Nested objects/arrays: Recursive search with path notation (e.g., "data->users->0->name")
 
 Available options include:
 
-- `-V, --value <search>`: Value to search for (alternative to passing as argument)
+- `-v, --value <search>`: Value to search for (alternative to passing as argument)
 - `-l, --limit <n>`: Maximum number of results to return (default: 1000)
 - `-j, --json`: Output results in JSON format
 - `--csv`: Output results in CSV format
 - `-c, --compact`: Show only matching columns in results
 - `--case-sensitive`: Perform case-sensitive search
 - `-e, --exact`: Search for exact matches only
+- `--regex`: Interpret search value as a regular expression
+- `--recursive`: Search recursively in nested JSON/JSONB fields or MongoDB documents
+- `--highlight`: Highlight matched text in the output for better visibility
 - `--verbose`: Show verbose output during search
 - `-d, --database <n>`: Specify database to connect to
 
@@ -473,22 +573,22 @@ The query command enables you to run raw SQL queries and see formatted results:
 
 ```bash
 # Execute a simple SELECT query
-db-tools query "Yard ReVision" "SELECT * FROM users LIMIT 10"
+db-tools query "Project Name" "SELECT * FROM users LIMIT 10"
 
 # Execute a complex query with joins and aggregation
-db-tools query "Yard ReVision" "SELECT u.name, COUNT(t.id) FROM users u JOIN transactions t ON u.id = t.user_id GROUP BY u.name ORDER BY COUNT(t.id) DESC LIMIT 5"
+db-tools query "Project Name" "SELECT u.name, COUNT(t.id) FROM users u JOIN transactions t ON u.id = t.user_id GROUP BY u.name ORDER BY COUNT(t.id) DESC LIMIT 5"
 
 # Execute a query with the --raw option
-db-tools query "Yard ReVision" --raw "UPDATE users SET last_login = NOW() WHERE id = 123"
+db-tools query "Project Name" --raw "UPDATE users SET last_login = NOW() WHERE id = 123"
 
 # Get JSON output
-db-tools query "Yard ReVision" "SELECT * FROM users WHERE created_at > '2025-01-01'" --json
+db-tools query "Project Name" "SELECT * FROM users WHERE created_at > '2025-01-01'" --json
 
 # Execute a query against a specific database
-db-tools query "Yard ReVision" "SELECT COUNT(*) FROM users" -d production
+db-tools query "Project Name" "SELECT COUNT(*) FROM users" -d production
 
 # Execute a query with verbose output
-db-tools query "Yard ReVision" "SELECT * FROM transactions WHERE amount > 1000" --verbose
+db-tools query "Project Name" "SELECT * FROM transactions WHERE amount > 1000" --verbose
 ```
 
 The query command:
@@ -521,71 +621,223 @@ Best practices:
 db-tools backup
 
 # Specify project name
-db-tools backup "Yard ReVision"
+db-tools backup "Project Name"
 
 # Specify output file
-db-tools backup "Yard ReVision" --output /path/to/backup.sql
+db-tools backup "Project Name" --output /path/to/backup.sql
 
 # Create encrypted backup
-db-tools backup "Yard ReVision" --encrypt
+db-tools backup "Project Name" --encrypt
 
 # Use custom format
-db-tools backup "Yard ReVision" --format custom
+db-tools backup "Project Name" --format custom
 ```
 
-The backup command uses PostgreSQL's `pg_dump` tool and supports two formats:
+For PostgreSQL, the backup command uses PostgreSQL's `pg_dump` tool and supports two formats:
 
 1. **Plain SQL** (default): Standard SQL dump that can be restored with `psql`
 2. **Custom Format**: PostgreSQL-specific format with compression and more features
 
-> **Note**: The backup command includes automatic version detection and will use the correct PostgreSQL version for your server, avoiding version mismatch errors.
+For MongoDB, the backup command uses MongoDB's `mongodump` tool with the `--archive` and `--gzip` options to create a compressed backup. Unlike PostgreSQL which creates a single file, MongoDB backups create a directory structure.
+
+```bash
+# MongoDB backup examples
+db-tools backup "MongoDB Project" --output ./backups/mongo_backup --force
+db-tools backup "MongoDB Project" --encrypt --output ./backups/mongo_encrypted --force
+
+# MongoDB backup creates a directory structure, not a single file
+# The directory will contain BSON files for each collection
+```
+
+> **Note**: The backup command includes automatic version detection and will use the correct tool version for your server, avoiding version mismatch errors.
 
 #### Restore Database
 
 ```bash
 # Interactive mode - lists available backups
-db-tools restore "Yard ReVision"
+db-tools restore "Project Name"
 
 # Specify input file
-db-tools restore "Yard ReVision" --input /path/to/backup.sql
+db-tools restore "Project Name" --input /path/to/backup.sql
 
 # Restore a custom format backup
-db-tools restore "Yard ReVision" --input /path/to/backup.backup
+db-tools restore "Project Name" --input /path/to/backup.backup
 
 # Verify backup without restoring (dry run)
-db-tools restore "Yard ReVision" --input /path/to/backup.backup --dry-run
+db-tools restore "Project Name" --input /path/to/backup.backup --dry-run
 ```
 
-The restore command automatically detects the backup format:
+For PostgreSQL, the restore command automatically detects the backup format:
 
 - Plain SQL backups are restored using `psql`
 - Custom format backups are restored using `pg_restore`
 
-#### Delete Table
+For MongoDB, the restore command uses `mongorestore` with the `--archive` and `--gzip` options.
+
+```bash
+# MongoDB restore examples
+db-tools restore "MongoDB Project" --input ./backups/mongo_backup --force
+db-tools restore "MongoDB Project" --input ./backups/mongo_encrypted --force
+
+# MongoDB restore from directory structure
+# The tool automatically detects if input is a directory or archive file
+```
+
+#### Temporary Backups (Auto-created)
+
+```bash
+# List all temporary backups (auto-deleted after 4 hours)
+db-tools list-temp-backups
+
+# Restore from a temporary backup
+db-tools restore-temp "Project Name"
+
+# Restore specific temporary backup
+db-tools restore-temp "Project Name" temp_project_delete_table_2024-01-24T10-30-00
+
+# Force restore without confirmation
+db-tools restore-temp "Project Name" backup-name --force
+```
+
+Temporary backups are:
+
+- **Automatically created** before dangerous operations (DELETE, DROP, TRUNCATE)
+- **Encrypted** with unique keys for security
+- **Auto-deleted** after 4 hours to save space
+- **Listed with expiration times** for easy management
+
+#### Delete Table/Collection
 
 ```bash
 # Interactive mode
 db-tools delete-table
 
-# Specify project and table
-db-tools delete-table "Yard ReVision" temp_data
+# Specify project and table/collection
+db-tools delete-table "Project Name" temp_data
 ```
 
-#### Remove Column
+#### Remove Column (PostgreSQL)
 
 ```bash
 # Interactive mode
 db-tools remove-column
 
 # Specify project, table, and column
-db-tools remove-column "Yard ReVision" designs unused_column
+db-tools remove-column "Project Name" designs unused_column
+```
+
+#### MongoDB-Specific Commands
+
+MongoDB has additional commands for collection management and document operations:
+
+##### Collection Management
+
+```bash
+# List collections in MongoDB database
+db-tools list-tables "MongoDB Project"
+db-tools list-tables "MongoDB Project" --detailed  # With document counts
+
+# Create a collection (automatically created when inserting documents)
+db-tools query "MongoDB Project" '{"insert": "new_collection", "documents": [{"name": "test"}]}' --force
+
+# Rename a collection
+db-tools rename-collection "MongoDB Project" old_collection new_collection --force
+
+# Delete a collection (with safety confirmation)
+db-tools delete-collection "MongoDB Project" collection_name --force
+
+# Remove a field from all documents in a collection
+db-tools remove-field "MongoDB Project" collection_name field_name --force
+
+# Preview field removal without executing
+db-tools remove-field "MongoDB Project" collection_name field_name --dry-run
+
+# Add a field to documents (when collection has data)
+db-tools add-column "MongoDB Project" collection_name new_field "string" --force
+```
+
+##### Document Operations
+
+```bash
+# Insert documents
+db-tools query "MongoDB Project" '{"insert": "users", "documents": [{"name": "John", "email": "john@example.com", "active": true}]}' --force
+
+# Find documents with filtering
+db-tools query "MongoDB Project" '{"find": "users", "filter": {"active": true}}' --force
+
+# Find with projection (specific fields only)
+db-tools query "MongoDB Project" '{"find": "users", "filter": {"active": true}, "projection": {"name": 1, "email": 1}}' --force
+
+# Find with sorting and limiting
+db-tools query "MongoDB Project" '{"find": "users", "filter": {}, "sort": {"created_at": -1}, "limit": 10}' --force
+
+# Update documents
+db-tools query "MongoDB Project" '{"update": "users", "updates": [{"q": {"name": "John"}, "u": {"$set": {"email": "newemail@example.com"}}}]}' --force
+
+# Update multiple documents
+db-tools query "MongoDB Project" '{"update": "users", "updates": [{"q": {"active": false}, "u": {"$set": {"status": "inactive"}}, "multi": true}]}' --force
+
+# Count documents
+db-tools count-records "MongoDB Project" users
+db-tools count-records "MongoDB Project" users --detailed
+
+# Count with filter
+db-tools query "MongoDB Project" '{"count": "users", "query": {"active": true}}' --force
+```
+
+##### MongoDB Aggregation Pipelines
+
+```bash
+# Group by field and count
+db-tools query "MongoDB Project" '{"aggregate": "orders", "pipeline": [{"$group": {"_id": "$status", "count": {"$sum": 1}}}], "cursor": {}}' --force
+
+# Match, group, and sort (complex aggregation)
+db-tools query "MongoDB Project" '{"aggregate": "orders", "pipeline": [{"$match": {"created_at": {"$gte": "2024-01-01"}}}, {"$group": {"_id": "$customer_id", "total": {"$sum": "$amount"}}}, {"$sort": {"total": -1}}], "cursor": {}}' --force
+
+# Aggregation with lookup (join collections)
+db-tools query "MongoDB Project" '{"aggregate": "orders", "pipeline": [{"$lookup": {"from": "users", "localField": "customer_id", "foreignField": "_id", "as": "customer"}}, {"$unwind": "$customer"}, {"$project": {"order_id": 1, "amount": 1, "customer_name": "$customer.name"}}], "cursor": {}}' --force
+```
+
+##### MongoDB Index Management
+
+```bash
+# Create index on single field
+db-tools create-index "MongoDB Project" users email --force
+
+# Create unique index
+db-tools create-index "MongoDB Project" users email --unique --force
+
+# Create compound index
+db-tools query "MongoDB Project" '{"createIndexes": "users", "indexes": [{"key": {"name": 1, "email": 1}, "name": "name_email_idx"}]}' --force
+
+# Create text index for search
+db-tools query "MongoDB Project" '{"createIndexes": "users", "indexes": [{"key": {"name": "text", "bio": "text"}, "name": "text_search_idx"}]}' --force
+
+# List indexes for a collection
+db-tools query "MongoDB Project" '{"listIndexes": "users"}' --force
+```
+
+##### MongoDB Search
+
+```bash
+# Search across all collections
+db-tools search "MongoDB Project" "john@example.com"
+
+# Search in specific collection
+db-tools search "MongoDB Project" users "john"
+
+# Search with regex
+db-tools search "MongoDB Project" --regex "^user.*" --highlight
+
+# Search with limit
+db-tools search "MongoDB Project" users "john" --limit 50
 ```
 
 #### Manage Permissions
 
 ```bash
 # Interactive mode
-db-tools manage-permissions "Yard ReVision"
+db-tools manage-permissions "Project Name"
 ```
 
 This command provides interactive options to:
@@ -604,10 +856,10 @@ db-tools list-databases
 db-tools dbs  # Short alias
 
 # Specify project to connect through
-db-tools list-databases "Yard ReVision"
+db-tools list-databases "Project Name"
 ```
 
-#### List Tables
+#### List Tables/Collections
 
 ```bash
 # Interactive mode
@@ -615,13 +867,13 @@ db-tools list-tables
 db-tools tables  # Short alias
 
 # Specify project
-db-tools list-tables "Yard ReVision"
+db-tools list-tables "Project Name"
 
 # Show detailed information including row counts
-db-tools list-tables "Yard ReVision" --detailed
+db-tools list-tables "Project Name" --detailed
 ```
 
-#### List Columns
+#### List Columns (PostgreSQL)
 
 ```bash
 # Interactive mode
@@ -629,7 +881,7 @@ db-tools list-columns
 db-tools columns  # Short alias
 
 # Specify project and table
-db-tools list-columns "Yard ReVision" users
+db-tools list-columns "Project Name" users
 ```
 
 #### Count Records
@@ -639,17 +891,20 @@ db-tools list-columns "Yard ReVision" users
 db-tools count-records
 db-tools count  # Short alias
 
-# Specify project and table
-db-tools count-records "Yard ReVision" users
+# Specify project and table/collection
+db-tools count-records "Project Name" users
 
-# Count records in all tables
-db-tools count-records "Yard ReVision" --all
+# Count records in all tables/collections
+db-tools count-records "Project Name" --all
 
 # Show detailed statistics
-db-tools count-records "Yard ReVision" users --detailed
+db-tools count-records "Project Name" users --detailed
 
-# Count with SQL WHERE condition
-db-tools count-records "Yard ReVision" users --where "is_admin = true"
+# Count with SQL WHERE condition (PostgreSQL)
+db-tools count-records "Project Name" users --where "is_admin = true"
+
+# Count with MongoDB query
+db-tools count-records "MongoDB Project" users --query '{"is_admin": true}'
 ```
 
 ## Automatic Database Backups
@@ -660,13 +915,13 @@ The CLI provides a powerful automatic backup feature that can schedule regular b
 
 ```bash
 # Set up daily backups with default settings
-db-tools auto-backup "Yard ReVision"
+db-tools auto-backup "Project Name"
 
 # Backup a specific database with a 14-day retention period
-db-tools auto-backup "Yard ReVision" --database production --retention-days 14
+db-tools auto-backup "Project Name" --database production --retention-days 14
 
 # Encrypted backup running weekly on Sundays at 2AM
-db-tools auto-backup "Yard ReVision" --encrypt --schedule "0 2 * * 0"
+db-tools auto-backup "Project Name" --encrypt --schedule "0 2 * * 0"
 ```
 
 ### Available Options
@@ -704,30 +959,59 @@ db-tools auto-backup "Yard ReVision" --encrypt --schedule "0 2 * * 0"
 ### Disabling Automatic Backups
 
 ```bash
-db-tools auto-backup "Yard ReVision" --disable
+db-tools auto-backup "Project Name" --disable
 ```
 
 ## Schema Configuration
 
-The database schema for the Yard ReVision project is defined in the code based on requirements from the backend team. The schema includes:
-
-- Users accounts and authentication
-- Designs and design versions
-- Comments, collections, and favorites
-- Templates and template categories
-- Credit packages and transactions
-- Referrals and notifications
-- And more
+The database schema for your project can be defined in code. Examples are provided in the `schemas/` directory.
 
 ## Database Migration Support
 
-The tool includes support for tracking and applying SQL migrations. Migrations should be placed in the `migrations/` directory and follow the naming pattern `NNN_description.sql` where `NNN` is a sequence number.
+The tool includes support for tracking and applying SQL migrations for PostgreSQL. Migrations should be placed in the `migrations/` directory and follow the naming pattern `NNN_description.sql` where `NNN` is a sequence number.
 
 Migrations that have been applied are tracked in a `migrations` table in the database to prevent duplicate execution.
+
+For MongoDB, the tool tracks migration operations in a `migrations` collection.
 
 ## Backup and Restore
 
 The tool supports both plain and encrypted backups. When using encrypted backups, a `.key` file is generated alongside the backup file. Both files are required for restoration.
+
+## Safety System 🛡️
+
+db-tools includes a comprehensive safety validation system to prevent accidental data loss or database corruption.
+
+**⚠️ IMPORTANT: Always use safety-enabled commands for destructive operations!**
+
+See the [Safety Guide](./SAFETY_GUIDE.md) for detailed information on:
+
+- Using safe commands vs direct SQL
+- Understanding the test database validation system
+- Risk levels and operation classification
+- Automatic temporary encrypted backups (4-hour retention)
+- Best practices for team usage
+
+### Key Safety Features
+
+1. **Test Environment Validation** - Operations tested in isolated database first
+2. **Temporary Encrypted Backups** - Auto-created before dangerous operations, deleted after 4 hours
+3. **Dependency Analysis** - Shows foreign key relationships before deletions
+4. **Multi-level Confirmation** - Requires explicit confirmation for dangerous operations
+
+### Quick Safety Reference
+
+```bash
+# ✅ SAFE - Use these commands with proper validation:
+db-tools delete-table "Project" table_name --force
+db-tools remove-column "Project" table column --force
+db-tools rename-table "Project" old_name new_name --force  # PostgreSQL
+db-tools rename-collection "Project" old_name new_name --force  # MongoDB
+
+# ❌ UNSAFE - Never use direct SQL for:
+db-tools query "Project" "DROP TABLE users"  # DON'T DO THIS!
+psql -c "DELETE FROM orders"                 # DANGEROUS!
+```
 
 ## Security Best Practices
 
@@ -750,6 +1034,7 @@ The tool automatically manages required PostgreSQL extensions:
 ## Compatibility
 
 - **PostgreSQL**: Requires PostgreSQL 16 client tools for compatibility with PostgreSQL 16 servers
+- **MongoDB**: Works with MongoDB 4.0+ and requires MongoDB Database Tools
 - **Node.js**: 14 and higher
 - **Operating Systems**: macOS, Linux, and Windows
 - **AI Assistants**: Compatible with major AI assistants that can execute shell commands
@@ -780,15 +1065,20 @@ The project includes a test script that verifies core functionality. To run the 
 # Navigate to the project directory
 cd db-tools
 
-# Run the test script
-./scripts/test-tools.sh
+# Run the unified test suite
+./scripts/testing/test-suite.sh --all
+
+# Run tests for specific database
+./scripts/testing/test-suite.sh --database postgres --level basic
+./scripts/testing/test-suite.sh --database mongodb --level basic
 ```
 
-The test script will:
-1. Verify PostgreSQL 16 client tools are installed
-2. Create a temporary test database
-3. Run a series of tests on all major commands
-4. Clean up after itself by dropping the test database
+The test suite will:
+
+1. Verify PostgreSQL 16 and MongoDB tools are installed
+2. Create temporary test databases
+3. Run comprehensive tests on all major commands for both databases
+4. Clean up after itself by dropping the test databases
 
 Make sure PostgreSQL server is running locally before executing the tests. The script requires PostgreSQL client tools to be installed and properly configured.
 
@@ -866,14 +1156,28 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 1. Install the PostgreSQL client tools that match your server version
 2. Run the install.sh script which installs the correct version (PostgreSQL 16 by default)
 
-### Foreign Key Violations
+### MongoDB Connectivity Issues
 
-**Problem**: Foreign key constraint violations
+**Problem**: Cannot connect to MongoDB server
 
 **Solutions**:
 
-1. Ensure data is inserted in the correct order (parent records before child records)
-2. Check for missing referenced data
+1. Verify MongoDB is running:
+   ```bash
+   # Check if MongoDB service is running
+   mongosh
+   ```
+2. Check connection URI format:
+
+   ```
+   mongodb://[username:password@]host[:port][/database]
+   ```
+
+3. Ensure MongoDB Database Tools are installed:
+   ```bash
+   # Check mongodump version
+   mongodump --version
+   ```
 
 ## Extending the Tool
 
@@ -898,9 +1202,4 @@ If you continue to experience issues:
 
 1. Create an issue in the project repository
 2. Include detailed error messages and reproduction steps
-3. Specify the PostgreSQL version and operating system
-
-## To Do
-
-1. Add support for mongo db
-2. Add support for solana and other distributed databases
+3. Specify the database version and operating system

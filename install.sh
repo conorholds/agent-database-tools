@@ -12,7 +12,7 @@ PG_TARGET_VERSION="16"
 
 echo -e "${BLUE}DB Tools Installer${NC}"
 echo "================="
-echo "This script will install PostgreSQL $PG_TARGET_VERSION client tools and set up DB Tools."
+echo "This script will install PostgreSQL $PG_TARGET_VERSION client tools, MongoDB tools, and set up DB Tools."
 echo ""
 
 # Function to check if a command exists
@@ -215,6 +215,162 @@ check_pg_tools() {
   return 0
 }
 
+# Check for MongoDB tools
+check_mongo_tools() {
+  local missing_tools=()
+  local all_installed=true
+
+  echo ""
+  echo -e "${BLUE}Checking for MongoDB tools...${NC}"
+  
+  for tool in mongod mongodump mongorestore mongosh; do
+    if ! command_exists "$tool"; then
+      echo -e "${RED}✗ $tool not found${NC}"
+      missing_tools+=("$tool")
+      all_installed=false
+    else
+      echo -e "${GREEN}✓ $tool is available${NC}"
+      
+      # Get version for mongod
+      if [ "$tool" = "mongod" ]; then
+        mongo_version_str=$($tool --version 2>/dev/null | head -1)
+        echo "   MongoDB version: $mongo_version_str"
+      fi
+    fi
+  done
+  
+  # Check if we need to install
+  if [ "$all_installed" = false ]; then
+    echo -e "${YELLOW}Need to install MongoDB tools${NC}"
+    
+    # Install MongoDB tools
+    echo ""
+    echo -e "${BLUE}Installing MongoDB tools...${NC}"
+    
+    # Detect OS and install MongoDB tools
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      # macOS
+      if command_exists brew; then
+        echo "Installing MongoDB via Homebrew..."
+        
+        # Add MongoDB tap if not already added
+        brew tap mongodb/brew || true
+        
+        # Install MongoDB Community Edition
+        if brew ls --versions mongodb-community > /dev/null; then
+          echo "MongoDB Community is already installed"
+        else
+          echo "Installing MongoDB Community..."
+          brew install mongodb-community
+        fi
+        
+        # Install MongoDB Database Tools
+        if brew ls --versions mongodb-database-tools > /dev/null; then
+          echo "MongoDB Database Tools are already installed"
+        else
+          echo "Installing MongoDB Database Tools..."
+          brew install mongodb-database-tools
+        fi
+        
+        # Install mongosh (MongoDB Shell)
+        if brew ls --versions mongosh > /dev/null; then
+          echo "MongoDB Shell (mongosh) is already installed"
+        else
+          echo "Installing MongoDB Shell..."
+          brew install mongosh
+        fi
+        
+      else
+        echo -e "${RED}Error: Homebrew not found. Please install Homebrew first:${NC}"
+        echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        exit 1
+      fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+      # Linux (Debian/Ubuntu)
+      if command_exists apt-get; then
+        echo "Installing MongoDB on Ubuntu/Debian..."
+        
+        # Import MongoDB public key
+        wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+        
+        # Add MongoDB repository
+        echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+        
+        # Update package list
+        sudo apt-get update
+        
+        # Install MongoDB
+        sudo apt-get install -y mongodb-org mongodb-database-tools mongodb-mongosh
+        
+      # RHEL/CentOS
+      elif command_exists yum; then
+        echo "Installing MongoDB on RHEL/CentOS..."
+        
+        # Create repository file
+        sudo tee /etc/yum.repos.d/mongodb-org-7.0.repo << EOF
+[mongodb-org-7.0]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/redhat/8/mongodb-org/7.0/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-7.0.asc
+EOF
+        
+        # Install MongoDB
+        sudo yum install -y mongodb-org mongodb-database-tools mongodb-mongosh
+        
+      else
+        echo -e "${RED}Error: Unsupported Linux distribution. Please install MongoDB tools manually.${NC}"
+        echo "See: https://docs.mongodb.com/manual/installation/"
+        exit 1
+      fi
+    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+      # Windows
+      echo -e "${RED}Error: On Windows, please install MongoDB tools manually:${NC}"
+      echo "  1. Download from https://www.mongodb.com/try/download/community"
+      echo "  2. Download Database Tools from https://www.mongodb.com/try/download/database-tools"
+      echo "  3. Add bin directories to your PATH"
+      exit 1
+    else
+      echo -e "${RED}Error: Unsupported operating system. Please install MongoDB tools manually.${NC}"
+      echo "See: https://docs.mongodb.com/manual/installation/"
+      exit 1
+    fi
+    
+    # Check if installation succeeded
+    echo ""
+    echo -e "${BLUE}Verifying MongoDB tools installation...${NC}"
+    
+    all_tools_available=true
+    
+    for tool in mongod mongodump mongorestore mongosh; do
+      if ! command_exists "$tool"; then
+        echo -e "${RED}✗ $tool is still not available${NC}"
+        all_tools_available=false
+      else
+        echo -e "${GREEN}✓ $tool is available${NC}"
+        
+        # Check version
+        if [ "$tool" = "mongod" ]; then
+          mongo_version_str=$($tool --version 2>/dev/null | head -1)
+          echo "   MongoDB version: $mongo_version_str"
+        fi
+      fi
+    done
+    
+    if [ "$all_tools_available" = false ]; then
+      echo -e "${YELLOW}Warning: Some MongoDB tools may not be available. DB Tools will still work for PostgreSQL.${NC}"
+      echo "MongoDB functionality may be limited. You can install the missing tools manually."
+    else
+      echo -e "${GREEN}MongoDB tools installed successfully!${NC}"
+    fi
+  else
+    echo -e "${GREEN}MongoDB tools are already installed correctly.${NC}"
+  fi
+  
+  return 0
+}
+
 # Install db-tools
 install_db_tools() {
   echo ""
@@ -232,6 +388,7 @@ install_db_tools() {
 
 # Main script flow
 check_pg_tools
+check_mongo_tools
 install_db_tools
 
 exit 0
